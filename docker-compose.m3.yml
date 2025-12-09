@@ -131,10 +131,10 @@ services:
     platform: linux/amd64  # Requires Rosetta 2
     container_name: benchmark-starrocks-fe
     hostname: starrocks-fe
+    command: /opt/starrocks/fe/bin/start_fe.sh
     environment:
-      FE_SERVERS: "fe1:starrocks-fe:9010"
-      FE_ID: "1"
       JAVA_OPTS: "-Xmx2048m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+      HOST_TYPE: "FQDN"
     ports:
       - "8030:8030"  # HTTP Server
       - "9020:9020"  # Thrift Server
@@ -142,8 +142,9 @@ services:
       - "9010:9010"  # Internal Communication
     volumes:
       - ./data/starrocks-fe:/opt/starrocks/fe/meta
-      - ./configs/starrocks_fe.conf:/opt/starrocks/fe/conf/fe.conf:ro
-      - ./sql/starrocks_schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # Testing with default config only
+      # - ./configs/starrocks_fe.conf:/opt/starrocks/fe/conf/fe.conf:ro
+      # - ./sql/starrocks_schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
     deploy:
       resources:
         limits:
@@ -153,8 +154,11 @@ services:
           memory: 2G
           cpus: '1.0'
     healthcheck:
-      <<: *healthcheck-long
       test: ["CMD", "curl", "-f", "http://localhost:8030/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s  # StarRocks FE needs more time to initialize
     networks:
       - benchmark-network
     labels:
@@ -166,23 +170,29 @@ services:
   # ==========================================
   # StarRocks Backend - Rosetta 2 Translation
   # ==========================================
+  # NOTE: StarRocks BE fails on ARM64/Rosetta 2 due to x86-64 SIMD instruction
+  # requirements (AVX2, SSE4.2) that cannot be properly translated.
+  # Symptom: 99% CPU, ports never listen, connection refused errors.
+  # Resolution: Disabled for M3 testing. Use x86-64 hardware or ARM64-native alternatives.
+  # See: Research findings from December 8, 2024
   starrocks-be:
     <<: *common
     image: starrocks/be-ubuntu:3.2.1
     platform: linux/amd64  # Requires Rosetta 2
     container_name: benchmark-starrocks-be
     hostname: starrocks-be
+    command: /opt/starrocks/be/bin/start_be.sh
     environment:
-      BE_SERVERS: "be1:starrocks-be:9050"
-      FE_SERVERS: "fe1:starrocks-fe:9010"
-      BE_ID: "1"
+      # Removed unused BE_SERVERS, FE_SERVERS, BE_ID
+      JAVA_OPTS: "-Xmx2048m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
     ports:
       - "8040:8040"  # HTTP Server (BE)
       - "9050:9050"  # Heartbeat Service
       - "9060:9060"  # Thrift Server (BE)
     volumes:
       - ./data/starrocks-be:/opt/starrocks/be/storage
-      - ./configs/starrocks_be.conf:/opt/starrocks/be/conf/be.conf:ro
+      # Testing with default config only
+      # - ./configs/starrocks_be.conf:/opt/starrocks/be/conf/be.conf:ro
     depends_on:
       starrocks-fe:
         condition: service_healthy

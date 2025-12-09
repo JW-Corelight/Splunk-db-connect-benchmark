@@ -13,6 +13,8 @@ import clickhouse_connect
 import pymysql
 import json
 import statistics
+import sys
+import argparse
 from typing import Dict, List, Tuple
 from datetime import datetime
 
@@ -21,8 +23,8 @@ POSTGRESQL_CONFIG = {
     'host': 'localhost',
     'port': 5432,
     'database': 'cybersecurity',
-    'user': 'benchmark_user',
-    'password': 'benchmark_pass'
+    'user': 'postgres',
+    'password': 'postgres123'
 }
 
 CLICKHOUSE_CONFIG = {
@@ -275,10 +277,24 @@ def run_benchmark(db_name: str, query_func, query: str) -> Dict:
 
 def main():
     """Main benchmark execution"""
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Native Performance Baseline Benchmark')
+    parser.add_argument('--skip-starrocks', action='store_true',
+                        help='Skip StarRocks benchmarks (use on ARM64/Apple Silicon)')
+    args = parser.parse_args()
+
     print_header("Native Performance Baseline Benchmark")
     print(f"Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Iterations per Query: {ITERATIONS}")
-    print(f"Total Queries: {len(QUERIES) * 3}")  # 5 queries × 3 databases
+
+    databases_to_test = ['PostgreSQL', 'ClickHouse']
+    if not args.skip_starrocks:
+        databases_to_test.append('StarRocks')
+    else:
+        print(f"⚠️  Skipping StarRocks (ARM64 incompatibility)")
+
+    print(f"Databases: {', '.join(databases_to_test)}")
+    print(f"Total Queries: {len(QUERIES) * len(databases_to_test)}")
 
     all_results = {}
 
@@ -307,25 +323,29 @@ def main():
             print_result(query_info['name'], 'ClickHouse', result['latencies'], result['row_count'])
 
     # === StarRocks Benchmarks ===
-    print_header("StarRocks Native Queries")
-    all_results['starrocks'] = {}
+    if not args.skip_starrocks:
+        print_header("StarRocks Native Queries")
+        all_results['starrocks'] = {}
 
-    for query_id, query_info in QUERIES.items():
-        print(f"\n[StarRocks] Running: {query_info['name']}...")
-        result = run_benchmark('StarRocks', query_starrocks, query_info['starrocks'])
+        for query_id, query_info in QUERIES.items():
+            print(f"\n[StarRocks] Running: {query_info['name']}...")
+            result = run_benchmark('StarRocks', query_starrocks, query_info['starrocks'])
 
-        if result:
-            all_results['starrocks'][query_id] = result
-            print_result(query_info['name'], 'StarRocks', result['latencies'], result['row_count'])
+            if result:
+                all_results['starrocks'][query_id] = result
+                print_result(query_info['name'], 'StarRocks', result['latencies'], result['row_count'])
 
     # === Summary ===
     print_header("Benchmark Summary")
 
     for query_id, query_info in QUERIES.items():
         print(f"\n{query_info['name']}:")
-        print(f"  PostgreSQL: {all_results['postgresql'][query_id]['avg_latency_ms']:.2f} ms")
-        print(f"  ClickHouse: {all_results['clickhouse'][query_id]['avg_latency_ms']:.2f} ms")
-        print(f"  StarRocks:  {all_results['starrocks'][query_id]['avg_latency_ms']:.2f} ms")
+        if query_id in all_results.get('postgresql', {}):
+            print(f"  PostgreSQL: {all_results['postgresql'][query_id]['avg_latency_ms']:.2f} ms")
+        if query_id in all_results.get('clickhouse', {}):
+            print(f"  ClickHouse: {all_results['clickhouse'][query_id]['avg_latency_ms']:.2f} ms")
+        if query_id in all_results.get('starrocks', {}):
+            print(f"  StarRocks:  {all_results['starrocks'][query_id]['avg_latency_ms']:.2f} ms")
 
     # === Save Results ===
     output_file = f"results/native_baseline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
