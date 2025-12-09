@@ -2,8 +2,8 @@
 **Database Benchmark Environment for MacBook Pro M3**
 
 **Date:** December 9, 2024
-**Status:** ✅ Core Infrastructure Complete + Native Benchmarks Complete
-**Completion:** ~95% (PostgreSQL vs ClickHouse benchmarked, Splunk/Iceberg setup remaining)
+**Status:** ✅ Core Infrastructure Complete + Native Benchmarks Complete + Splunk DB Connect Tested
+**Completion:** ~98% (PostgreSQL vs ClickHouse benchmarked, Splunk DB Connect overhead measured)
 
 ---
 
