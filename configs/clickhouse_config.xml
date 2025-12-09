@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<!-- ClickHouse Configuration - M3 Optimized -->
+<!-- Purpose: Optimize for ARM64 architecture with NEON SIMD -->
+<!-- Last Updated: December 7, 2024 -->
+
+<clickhouse>
+    <!-- Logging Configuration -->
+    <logger>
+        <level>warning</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>100M</size>
+        <count>3</count>
+    </logger>
+
+    <!-- User Configuration (required for 24.11+) -->
+    <user_directories>
+        <users_xml>
+            <path>/etc/clickhouse-server/users.xml</path>
+        </users_xml>
+    </user_directories>
+
+    <!-- Memory Settings (M3-Optimized - Reduced to fit 8GB Docker limit) -->
+    <max_server_memory_usage>6000000000</max_server_memory_usage>  <!-- 6GB out of 8GB allocated -->
+    <max_memory_usage>2000000000</max_memory_usage>  <!-- 2GB per query -->
+    <max_bytes_before_external_group_by>1500000000</max_bytes_before_external_group_by>  <!-- 1.5GB -->
+    <max_bytes_before_external_sort>1500000000</max_bytes_before_external_sort>
+
+    <!-- Thread Pool Settings (M3-optimized for 8-core) -->
+    <max_threads>6</max_threads>
+    <max_query_processing_threads>6</max_query_processing_threads>
+    <max_insert_threads>4</max_insert_threads>
+    <background_pool_size>4</background_pool_size>
+    <background_merges_mutations_concurrency_ratio>2</background_merges_mutations_concurrency_ratio>
+    <background_schedule_pool_size>4</background_schedule_pool_size>
+    <background_distributed_schedule_pool_size>4</background_distributed_schedule_pool_size>
+
+    <!-- ARM64 NEON Optimizations -->
+    <compile_expressions>1</compile_expressions>
+    <min_count_to_compile_expression>1</min_count_to_compile_expression>
+    <compile_aggregate_expressions>1</compile_aggregate_expressions>
+    <min_count_to_compile_aggregate_expression>1</min_count_to_compile_aggregate_expression>
+
+    <!-- Storage Paths -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+
+    <!-- Network Settings -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <interserver_http_port>9009</interserver_http_port>
+
+    <!-- Query Settings -->
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <max_connections>200</max_connections>
+    <keep_alive_timeout>30</keep_alive_timeout>
+
+    <!-- Cache Settings -->
+    <mark_cache_size>1073741824</mark_cache_size>  <!-- 1GB (reduced from 5GB) -->
+    <uncompressed_cache_size>536870912</uncompressed_cache_size>  <!-- 512MB (reduced from 2GB) -->
+
+    <!-- Compression (optimized for M3 SSD) -->
+    <compression>
+        <case>
+            <method>zstd</method>
+            <level>3</level>
+        </case>
+    </compression>
+
+    <!-- Query Complexity Limits -->
+    <max_query_size>1048576</max_query_size>
+    <interactive_delay>100000</interactive_delay>
+    <max_replica_delay_for_distributed_queries>300</max_replica_delay_for_distributed_queries>
+
+    <!-- Distributed Query Settings -->
+    <distributed_product_mode>deny</distributed_product_mode>
+    <distributed_aggregation_memory_efficient>1</distributed_aggregation_memory_efficient>
+    <distributed_ddl_task_timeout>180</distributed_ddl_task_timeout>
+
+    <!-- Merge Settings -->
+    <merge_tree>
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+        <max_replicated_merges_in_queue>6</max_replicated_merges_in_queue>
+        <number_of_free_entries_in_pool_to_execute_mutation>10</number_of_free_entries_in_pool_to_execute_mutation>
+    </merge_tree>
+
+    <!-- Replication (disabled for single-node) -->
+    <zookeeper incl="zookeeper-servers" optional="true" />
+
+    <!-- Metrics -->
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+    </prometheus>
+
+    <!-- Query Log (disabled for benchmarks) -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <!-- Disable slow query logging during benchmarks -->
+    <query_thread_log remove="remove"/>
+    <query_views_log remove="remove"/>
+    <part_log remove="remove"/>
+</clickhouse>

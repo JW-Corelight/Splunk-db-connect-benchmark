@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "WebFetch(domain:hub.docker.com)",
+      "WebFetch(domain:docs.splunk.com)",
+      "WebFetch(domain:help.splunk.com)",
+      "Bash(tree:*)",
+      "Bash(pgrep:*)",
+      "Bash(docker-compose:*)",
+      "Bash(lsof:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker stats:*)",
+      "Bash(docker info:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:clickhouse.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(dmesg:*)",
+      "Bash(cat:*)",
+      "Bash(docker restart:*)",
+      "Bash(git init:*)",
+      "WebFetch(domain:docs.starrocks.io)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

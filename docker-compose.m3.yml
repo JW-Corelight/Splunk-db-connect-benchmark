@@ -1,0 +1,429 @@
+version: '3.8'
+
+# ================================================
+# Database Benchmark Environment - M3 Optimized
+# ================================================
+# Purpose: Multi-database benchmark for cybersecurity analytics
+# Platforms: Splunk, PostgreSQL, ClickHouse, StarRocks
+# Target: MacBook Pro M3 (Apple Silicon)
+# Version: 1.0.0
+# Last Updated: December 7, 2024
+# ================================================
+
+# Common settings for all services
+x-common-settings: &common
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "100m"
+      max-file: "3"
+
+# Short healthcheck (for fast-starting services)
+x-healthcheck-short: &healthcheck-short
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+# Long healthcheck (for slow-starting services)
+x-healthcheck-long: &healthcheck-long
+  interval: 30s
+  timeout: 10s
+  retries: 10
+  start_period: 120s
+
+services:
+  # ==========================================
+  # PostgreSQL - ARM64 Native
+  # ==========================================
+  postgresql:
+    <<: *common
+    image: postgres:16-alpine
+    platform: linux/arm64
+    container_name: benchmark-postgresql
+    hostname: postgresql
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: ${POSTGRES_DB:-cybersecurity}
+      POSTGRES_INITDB_ARGS: "--data-checksums --encoding=UTF8 --locale=C"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/data
+      - ./configs/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./sql/postgresql_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c shared_preload_libraries=pg_stat_statements
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      <<: *healthcheck-short
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-cybersecurity}"]
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=postgresql"
+      - "benchmark.architecture=arm64"
+      - "benchmark.category=database"
+
+  # ==========================================
+  # ClickHouse - ARM64 Native with NEON SIMD
+  # ==========================================
+  clickhouse:
+    <<: *common
+    image: clickhouse/clickhouse-server:24.11  # Ubuntu-based for better ARM64 stability
+    platform: linux/arm64
+    container_name: benchmark-clickhouse
+    hostname: clickhouse
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    ports:
+      - "8123:8123"  # HTTP Interface
+      - "9002:9000"  # Native Protocol (mapped to 9002 to avoid MinIO conflict)
+      - "9009:9009"  # Inter-server
+    volumes:
+      - ./data/clickhouse:/var/lib/clickhouse
+      # Testing with default config only
+      # - ./configs/clickhouse_config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./configs/clickhouse_users.xml:/etc/clickhouse-server/users.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      <<: *healthcheck-short
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=clickhouse"
+      - "benchmark.architecture=arm64"
+      - "benchmark.category=database"
+      - "benchmark.optimization=neon-simd"
+
+  # ==========================================
+  # StarRocks Frontend - Rosetta 2 Translation
+  # ==========================================
+  starrocks-fe:
+    <<: *common
+    image: starrocks/fe-ubuntu:3.2.1
+    platform: linux/amd64  # Requires Rosetta 2
+    container_name: benchmark-starrocks-fe
+    hostname: starrocks-fe
+    environment:
+      FE_SERVERS: "fe1:starrocks-fe:9010"
+      FE_ID: "1"
+      JAVA_OPTS: "-Xmx2048m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    ports:
+      - "8030:8030"  # HTTP Server
+      - "9020:9020"  # Thrift Server
+      - "9030:9030"  # MySQL Protocol
+      - "9010:9010"  # Internal Communication
+    volumes:
+      - ./data/starrocks-fe:/opt/starrocks/fe/meta
+      - ./configs/starrocks_fe.conf:/opt/starrocks/fe/conf/fe.conf:ro
+      - ./sql/starrocks_schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      <<: *healthcheck-long
+      test: ["CMD", "curl", "-f", "http://localhost:8030/api/health"]
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=starrocks-fe"
+      - "benchmark.architecture=amd64-rosetta2"
+      - "benchmark.category=database"
+      - "benchmark.component=frontend"
+
+  # ==========================================
+  # StarRocks Backend - Rosetta 2 Translation
+  # ==========================================
+  starrocks-be:
+    <<: *common
+    image: starrocks/be-ubuntu:3.2.1
+    platform: linux/amd64  # Requires Rosetta 2
+    container_name: benchmark-starrocks-be
+    hostname: starrocks-be
+    environment:
+      BE_SERVERS: "be1:starrocks-be:9050"
+      FE_SERVERS: "fe1:starrocks-fe:9010"
+      BE_ID: "1"
+    ports:
+      - "8040:8040"  # HTTP Server (BE)
+      - "9050:9050"  # Heartbeat Service
+      - "9060:9060"  # Thrift Server (BE)
+    volumes:
+      - ./data/starrocks-be:/opt/starrocks/be/storage
+      - ./configs/starrocks_be.conf:/opt/starrocks/be/conf/be.conf:ro
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      <<: *healthcheck-long
+      test: ["CMD", "curl", "-f", "http://localhost:8040/api/health"]
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=starrocks-be"
+      - "benchmark.architecture=amd64-rosetta2"
+      - "benchmark.category=database"
+      - "benchmark.component=backend"
+
+  # ==========================================
+  # Splunk Enterprise - Rosetta 2 Translation
+  # ==========================================
+  splunk:
+    <<: *common
+    image: splunk/splunk:9.1.2
+    platform: linux/amd64  # Requires Rosetta 2
+    container_name: benchmark-splunk
+    hostname: splunk
+    environment:
+      SPLUNK_START_ARGS: "--accept-license"
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD:-ComplexP@ss123}
+      SPLUNK_ENABLE_LISTEN: "9997"
+      SPLUNK_ADD: "tcp 1514"
+      SPLUNK_LICENSE_URI: "Free"
+      OPTIMISTIC_ABOUT_FILE_LOCKING: "1"
+    ports:
+      - "8000:8000"  # Web UI
+      - "8088:8088"  # HTTP Event Collector (HEC)
+      - "8089:8089"  # Management Port
+      - "9997:9997"  # Receiving Port (TCP)
+      - "1514:1514"  # Syslog (TCP)
+    volumes:
+      - ./data/splunk/etc:/opt/splunk/etc
+      - ./data/splunk/var:/opt/splunk/var
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '2.0'
+        reservations:
+          memory: 4G
+          cpus: '1.0'
+    healthcheck:
+      <<: *healthcheck-long
+      test: >
+        CMD curl -f -k
+        https://localhost:8089/services/server/info
+        -u admin:${SPLUNK_PASSWORD:-ComplexP@ss123}
+        || exit 1
+      start_period: 300s
+      interval: 45s
+      timeout: 15s
+      retries: 20
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=splunk"
+      - "benchmark.architecture=amd64-rosetta2"
+      - "benchmark.category=siem"
+      - "benchmark.license=free"
+
+  # ==========================================
+  # MinIO - ARM64 Native (S3-Compatible Object Storage)
+  # ==========================================
+  minio:
+    <<: *common
+    image: minio/minio:latest
+    platform: linux/arm64
+    container_name: benchmark-minio
+    hostname: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password123}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+    ports:
+      - "9000:9000"  # API endpoint
+      - "9001:9001"  # Web Console
+    volumes:
+      - ./data/minio:/data
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      <<: *healthcheck-short
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=minio"
+      - "benchmark.architecture=arm64"
+      - "benchmark.category=storage"
+      - "benchmark.purpose=iceberg-backend"
+
+  # ==========================================
+  # Hive Metastore - Rosetta 2 (Iceberg Catalog)
+  # ==========================================
+  hive-metastore:
+    <<: *common
+    image: apache/hive:3.1.3
+    platform: linux/amd64  # Requires Rosetta 2
+    container_name: benchmark-hive-metastore
+    hostname: hive-metastore
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgresql:5432/metastore
+        -Djavax.jdo.option.ConnectionUserName=postgres
+        -Djavax.jdo.option.ConnectionPassword=postgres123
+    ports:
+      - "9083:9083"  # Thrift Metastore Service
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      <<: *healthcheck-long
+      test: ["CMD", "nc", "-z", "localhost", "9083"]
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=hive-metastore"
+      - "benchmark.architecture=amd64-rosetta2"
+      - "benchmark.category=metadata"
+      - "benchmark.purpose=iceberg-catalog"
+
+  # ==========================================
+  # Trino - ARM64 Native (SQL Query Engine)
+  # ==========================================
+  trino:
+    <<: *common
+    image: trinodb/trino:latest
+    platform: linux/arm64
+    container_name: benchmark-trino
+    hostname: trino
+    ports:
+      - "8080:8080"  # HTTP API and Web UI
+    volumes:
+      - ./configs/trino:/etc/trino
+    environment:
+      TRINO_ENVIRONMENT: production
+    depends_on:
+      minio:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    healthcheck:
+      <<: *healthcheck-long
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      start_period: 60s
+    networks:
+      - benchmark-network
+    labels:
+      - "benchmark.service=trino"
+      - "benchmark.architecture=arm64"
+      - "benchmark.category=query-engine"
+      - "benchmark.purpose=iceberg-queries"
+
+# ==========================================
+# Networks
+# ==========================================
+networks:
+  benchmark-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+    labels:
+      - "benchmark.network=primary"
+
+# ==========================================
+# Volumes (optional: named volumes for persistence)
+# ==========================================
+volumes:
+  postgresql-data:
+    driver: local
+    labels:
+      - "benchmark.volume=postgresql"
+  clickhouse-data:
+    driver: local
+    labels:
+      - "benchmark.volume=clickhouse"
+  starrocks-fe-meta:
+    driver: local
+    labels:
+      - "benchmark.volume=starrocks-fe"
+  starrocks-be-storage:
+    driver: local
+    labels:
+      - "benchmark.volume=starrocks-be"
+  splunk-etc:
+    driver: local
+    labels:
+      - "benchmark.volume=splunk-etc"
+  splunk-var:
+    driver: local
+    labels:
+      - "benchmark.volume=splunk-var"
+  minio-data:
+    driver: local
+    labels:
+      - "benchmark.volume=minio"
+      - "benchmark.purpose=iceberg-storage"
+  trino-config:
+    driver: local
+    labels:
+      - "benchmark.volume=trino"

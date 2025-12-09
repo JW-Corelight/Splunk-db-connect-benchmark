@@ -1,0 +1,122 @@
+# Database Benchmark .gitignore
+
+# ==========================================
+# Data Directories (Large Files)
+# ==========================================
+data/postgresql/
+data/clickhouse/
+data/starrocks-fe/
+data/starrocks-be/
+data/splunk/
+data/*.json
+data/*.csv
+data/*.log
+
+# ==========================================
+# Results and Logs
+# ==========================================
+results/
+logs/
+*.log
+
+# ==========================================
+# Environment and Secrets
+# ==========================================
+.env
+*.env
+!.env.example
+secrets/
+credentials/
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+venv/
+ENV/
+env/
+
+# ==========================================
+# macOS
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# ==========================================
+# Docker
+# ==========================================
+docker-compose.override.yml
+.docker/
+
+# ==========================================
+# IDE / Editors
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Temporary Files
+# ==========================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# ==========================================
+# Benchmarking Artifacts
+# ==========================================
+*.prof
+*.trace
+flamegraph*.svg
+perf.data
