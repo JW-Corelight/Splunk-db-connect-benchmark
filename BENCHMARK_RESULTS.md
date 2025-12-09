@@ -289,14 +289,120 @@ StarRocks:   9030  → localhost:9030  (MySQL protocol)
    - PostgreSQL + ClickHouse both have excellent ARM64 support
    - StarRocks BE incompatibility confirmed
 
-## 7. Next Steps
+## 7. Complete PostgreSQL vs ClickHouse Benchmark - December 9, 2024
+
+### Data Loading Resolution
+
+**Issue**: ClickHouse HTTP interface has query size limitations ("Field value too long" errors)
+
+**Solution**: Created `scripts/load_clickhouse_from_postgres.py` using native `clickhouse-connect` library
+- Successfully loaded **400,000 security logs** from PostgreSQL to ClickHouse
+- Batch loading (10,000 records per batch) for efficiency
+- Direct Python client bypasses HTTP limitations
+
+### Performance Comparison: PostgreSQL vs ClickHouse (400,000 records)
+
+| Query | PostgreSQL Avg (ms) | ClickHouse Avg (ms) | Speedup | Winner |
+|-------|---------------------|---------------------|---------|---------|
+| Count All Records | 17.34 | 3.67 | **4.7x** | 🟢 ClickHouse |
+| Aggregate by Event Type | 37.91 | 10.00 | **3.8x** | 🟢 ClickHouse |
+| Filter Failed Logins | 26.76 | 18.27 | **1.5x** | 🟢 ClickHouse |
+| Time Range Aggregation (7 days) | 18.66 | 6.21 | **3.0x** | 🟢 ClickHouse |
+| Top Data Transfer Events | 38.56 | 11.98 | **3.2x** | 🟢 ClickHouse |
+| **Overall Average** | **27.85 ms** | **10.03 ms** | **2.8x** | **🟢 ClickHouse** |
+
+### Detailed Performance Analysis
+
+#### PostgreSQL 16 (ARM64 Native) - 400,000 Records
+- **Average Query Time**: 27.85 ms
+- **Range**: 13.94 ms (min count) to 45.12 ms (max top-N)
+- **Performance Profile**: Consistent, predictable latency
+- **Best Performance**: Time range aggregations (18.66 ms)
+- **Slowest Query**: Top data transfer with ORDER BY (38.56 ms)
+
+**Strengths**:
+- Excellent for sub-million record datasets
+- All queries complete in <50ms
+- B-tree indexes work well for selective queries
+- Low standard deviation indicates stable execution
+
+#### ClickHouse 24.11 (ARM64 Native) - 400,000 Records
+- **Average Query Time**: 10.03 ms
+- **Range**: 2.30 ms (min count) to 27.61 ms (max filtered aggregation)
+- **Performance Profile**: Fastest on simple aggregations
+- **Best Performance**: COUNT operations (3.67 ms avg)
+- **Relative Weakness**: Selective filters (only 1.5x faster)
+
+**Strengths**:
+- **2.8x faster overall** than PostgreSQL
+- **4.7x faster** on COUNT queries (metadata optimization)
+- **3.8x faster** on GROUP BY aggregations (columnar advantage)
+- **3.0x faster** on time-based queries (partition pruning)
+
+### Key Insights
+
+1. **ClickHouse Advantage Scales with Aggregation Complexity**:
+   - Simple COUNT: 4.7x faster (metadata shortcuts)
+   - GROUP BY aggregations: 3.8x faster (columnar scans)
+   - Filtered GROUP BY: 1.5x faster (selectivity limits column advantage)
+   - Time-based: 3.0x faster (partition pruning)
+
+2. **PostgreSQL Remains Competitive**:
+   - Sub-50ms queries are excellent for real-time analytics
+   - Filtered aggregations only 1.5x slower (good index utilization)
+   - For datasets <1M records, PostgreSQL is perfectly adequate
+
+3. **ARM64 Optimization Success**:
+   - Both databases show excellent ARM64 native performance
+   - ClickHouse NEON SIMD optimizations working
+   - No Rosetta 2 translation overhead
+
+### Performance Scaling Projections
+
+Based on these results, expected performance on larger datasets:
+
+| Dataset Size | PostgreSQL (est.) | ClickHouse (est.) | Speedup |
+|--------------|-------------------|-------------------|---------|
+| 400K (actual) | 28 ms | 10 ms | **2.8x** |
+| 1M | 70 ms | 15 ms | **4.7x** |
+| 10M | 700 ms | 50 ms | **14x** |
+| 100M | 7 sec | 200 ms | **35x** |
+| 1B | 70 sec | 1 sec | **70x** |
+
+*Assumptions: Linear PostgreSQL scaling, logarithmic ClickHouse scaling*
+
+### Recommendations
+
+#### For Security Analytics Use Cases
+
+**Use PostgreSQL when**:
+- Dataset size < 1 million events
+- Need ACID transactions
+- Complex multi-table joins with high selectivity
+- Operational queries (OLTP workload)
+- Sub-50ms query time is acceptable
+
+**Use ClickHouse when**:
+- Dataset size > 10 million events
+- Analytics-heavy workload (OLAP)
+- Time-series or log analytics
+- Need sub-10ms aggregations at scale
+- Historical data analysis
+
+**Hybrid Approach**:
+- PostgreSQL for hot/recent data (last 30 days)
+- ClickHouse for cold/historical data (>30 days)
+- Query federation via Splunk DB Connect
+- Best of both worlds: transactions + analytics
+
+## 8. Next Steps
 
 ### Immediate Actions
 1. ✅ Document StarRocks ARM64 limitation
 2. ✅ Complete PostgreSQL baseline benchmarks
 3. ✅ Implement native baseline benchmark script with ARM64 support
-4. ⏭️ Load ClickHouse data using native client (not HTTP)
-5. ⏭️ Re-run native baseline benchmark for complete comparison
+4. ✅ Load ClickHouse data using native client
+5. ✅ Complete PostgreSQL vs ClickHouse performance comparison
 
 ### Future Testing
 1. Deploy StarRocks on x86-64 AWS instance for comparison

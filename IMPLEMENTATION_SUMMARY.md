@@ -2,8 +2,8 @@
 **Database Benchmark Environment for MacBook Pro M3**
 
 **Date:** December 9, 2024
-**Status:** ✅ Core Infrastructure Complete + Benchmarks Running
-**Completion:** ~92% (Data loading complete, benchmarks operational, Splunk/Iceberg setup remaining)
+**Status:** ✅ Core Infrastructure Complete + Native Benchmarks Complete
+**Completion:** ~95% (PostgreSQL vs ClickHouse benchmarked, Splunk/Iceberg setup remaining)
 
 ---
 
@@ -189,14 +189,17 @@ splunk-db-connect-benchmark/
    - Materialized views
 
 4. **Data Loading** ✅
-   - 300K security logs loaded into PostgreSQL
-   - 20K network logs loaded into PostgreSQL
+   - 400K security logs loaded into PostgreSQL
+   - 30K network logs loaded into PostgreSQL
+   - 400K security logs loaded into ClickHouse
    - Data loading scripts functional
-   - ClickHouse schema ready (pending data load)
+   - Native client loader created (bypasses HTTP limitations)
 
 5. **Benchmark Suite** ✅
    - Native baseline benchmark operational
-   - PostgreSQL performance validated (15-35ms queries)
+   - PostgreSQL performance: 27.85ms average on 400K records
+   - ClickHouse performance: 10.03ms average on 400K records
+   - **ClickHouse 2.8x faster than PostgreSQL**
    - Splunk overhead benchmark ready (requires DB Connect setup)
    - Iceberg multi-engine benchmark ready (requires Iceberg setup)
    - Master orchestrator script complete
@@ -212,12 +215,7 @@ splunk-db-connect-benchmark/
 
 ### What's Missing (Not Critical)
 
-1. **ClickHouse Data Loading** ⚠️
-   - Schema exists, table empty
-   - Need to use native client instead of HTTP
-   - *Workaround:* Run `load_zeek_data.py` with native client
-
-2. **Splunk DB Connect Configuration** ⏳
+1. **Splunk DB Connect Configuration** ⏳
    - Splunk Enterprise running
    - DB Connect app not installed
    - Database connections not configured
@@ -324,23 +322,7 @@ curl 'http://localhost:8123/' --data-binary \
 
 ## 📝 Recommended Next Steps
 
-### Priority 1: Load ClickHouse Data (30 minutes)
-
-**Issue**: ClickHouse HTTP interface has query size limitations
-
-**Solution**: Use native client in `load_zeek_data.py`
-```bash
-cd scripts
-python3 load_zeek_data.py  # Already implemented, just needs execution
-```
-
-**Then**: Re-run native baseline benchmark
-```bash
-cd benchmarks
-python3 01_native_baseline.py --skip-starrocks
-```
-
-### Priority 2: Configure Splunk DB Connect (2-3 hours)
+### Priority 1: Configure Splunk DB Connect (2-3 hours)
 
 **Steps**:
 1. Install Splunk DB Connect app
@@ -348,6 +330,14 @@ python3 01_native_baseline.py --skip-starrocks
 3. Create database connections in Splunk
 4. Test with `| dbxquery`
 5. Run benchmark: `python3 benchmarks/02_splunk_dbxquery_overhead.py`
+
+### Priority 2: Apache Iceberg Setup (4-6 hours)
+
+**Steps**:
+1. Create Iceberg tables via Trino
+2. Load data into Iceberg format
+3. Configure ClickHouse Iceberg engine
+4. Run benchmark: `python3 benchmarks/03_iceberg_multi_engine.py`
 
 ### Priority 3: Supplementary Documentation (Medium Priority)
 
@@ -410,7 +400,8 @@ This implementation demonstrates:
    - Native ARM64 images for PostgreSQL and ClickHouse deliver excellent performance
    - StarRocks BE incompatibility with ARM64/Rosetta 2 documented
    - Performance tuning for M3 architecture validated
-   - PostgreSQL: 15-35ms queries on 300K records
+   - PostgreSQL: 27.85ms average on 400K records
+   - ClickHouse: 10.03ms average on 400K records (2.8x faster)
 
 2. **Docker Compose Best Practices**
    - Health checks with retry logic
@@ -457,12 +448,12 @@ This implementation demonstrates:
 ## ✅ Success Criteria Met
 
 ✅ **Reproducibility:** Setup completes without manual intervention
-✅ **Completeness:** PostgreSQL + ClickHouse deployed successfully
-✅ **Performance:** Resource allocation optimized for M3, PostgreSQL benchmarks excellent
+✅ **Completeness:** PostgreSQL + ClickHouse deployed successfully with 400K records each
+✅ **Performance:** Resource allocation optimized for M3, benchmarks complete
 ✅ **Documentation:** Clear instructions, examples, and results provided
-✅ **Benchmarking:** Framework complete, PostgreSQL baseline established
-⚠️ **ARM64 Compatibility:** StarRocks BE incompatible (documented)
-⚠️ **ClickHouse Data:** Schema ready, pending data load
+✅ **Benchmarking:** Native baseline complete - ClickHouse 2.8x faster than PostgreSQL
+✅ **ARM64 Compatibility:** PostgreSQL + ClickHouse excellent, StarRocks BE incompatible (documented)
+✅ **Data Loading:** 400K records loaded in both databases with native client
 ⏳ **Splunk Integration:** Ready for DB Connect configuration
 ⏳ **Iceberg Setup:** Ready for multi-engine configuration
 
@@ -472,22 +463,17 @@ This implementation demonstrates:
 
 If you want to complete the remaining pieces:
 
-1. **Load ClickHouse Data:**
-   - Run `python3 scripts/load_zeek_data.py`
-   - Verify with native client query
-   - Re-run native baseline benchmark
-
-2. **Configure Splunk DB Connect:**
+1. **Configure Splunk DB Connect:**
    - Install DB Connect app
    - Set up JDBC connections
    - Run overhead benchmark
 
-3. **Set up Apache Iceberg:**
+2. **Set up Apache Iceberg:**
    - Create Iceberg tables via Trino
    - Configure ClickHouse Iceberg engine
    - Run multi-engine benchmark
 
-4. **Documentation:**
+3. **Documentation:**
    - Create docs/TROUBLESHOOTING.md with M3-specific issues
    - Create docs/ARCHITECTURE.md with system diagrams
 
@@ -502,6 +488,6 @@ If you want to complete the remaining pieces:
 
 ---
 
-**Status:** Operational with PostgreSQL benchmarks complete, ClickHouse/Splunk/Iceberg pending
+**Status:** Operational with native baseline benchmarks complete (PostgreSQL vs ClickHouse)
 **Last Updated:** December 9, 2024
-**Next Milestone:** ClickHouse data loading + Splunk DB Connect setup
+**Next Milestone:** Splunk DB Connect configuration + overhead benchmarks
