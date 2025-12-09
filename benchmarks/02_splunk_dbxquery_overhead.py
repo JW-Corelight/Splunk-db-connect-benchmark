@@ -22,15 +22,15 @@ from datetime import datetime
 SPLUNK_CONFIG = {
     'container': 'benchmark-splunk',
     'splunk_home': '/opt/splunk',
-    'auth': 'admin:changeme'
+    'auth': 'admin:ComplexP@ss123'
 }
 
 POSTGRESQL_CONFIG = {
     'host': 'localhost',
     'port': 5432,
     'database': 'cybersecurity',
-    'user': 'benchmark_user',
-    'password': 'benchmark_pass',
+    'user': 'postgres',
+    'password': 'postgres123',
     'splunk_connection': 'postgresql_conn'
 }
 
@@ -115,7 +115,9 @@ def print_comparison(query_name: str, db_name: str, direct_latency: float,
 # === Direct Database Query Functions ===
 def query_postgresql_direct(query: str) -> Tuple[List[Tuple], float]:
     """Execute query directly on PostgreSQL"""
-    conn = psycopg2.connect(**POSTGRESQL_CONFIG)
+    # Filter out splunk_connection which is not a valid psycopg2 parameter
+    pg_config = {k: v for k, v in POSTGRESQL_CONFIG.items() if k != 'splunk_connection'}
+    conn = psycopg2.connect(**pg_config)
     cursor = conn.cursor()
 
     start_time = time.perf_counter()

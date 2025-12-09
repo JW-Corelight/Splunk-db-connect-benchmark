@@ -428,7 +428,7 @@ After extensive troubleshooting, successfully configured Splunk DB Connect on Ap
 
 ### Key Findings
 
-1. **Extreme Overhead on M3**: DB Connect adds **~4.8 seconds per query**
+1. **Extreme Overhead on M3**: DB Connect adds **~4.8-5.0 seconds per query** (both databases)
    - Far exceeds typical 100-300ms overhead documented in literature
    - Root causes:
      - Rosetta 2 translation overhead (Java under emulation)
@@ -436,11 +436,18 @@ After extensive troubleshooting, successfully configured Splunk DB Connect on Ap
      - DB Connect Task Server initialization per query
      - Small dataset (400K records) means overhead dominates
 
-2. **Direct ClickHouse Performance**: Excellent (5-19 ms)
-   - Native ARM64 build delivers sub-20ms queries
-   - Columnar storage + NEON SIMD optimizations working
+2. **Direct Database Performance**: Excellent native performance
+   - ClickHouse: 4-13 ms (fastest, columnar + NEON SIMD)
+   - PostgreSQL: 15-35 ms (excellent for OLTP database)
+   - Native ARM64 builds deliver optimal performance
 
-3. **Splunk DB Connect Viability**:
+3. **Overhead is Absolute, Not Proportional**:
+   - ClickHouse (fast native): +4,771ms overhead (37,000% slower)
+   - PostgreSQL (slower native): +4,990ms overhead (21,518% slower)
+   - **Finding**: Overhead is constant ~5 seconds regardless of query complexity
+   - Fast queries suffer disproportionately (ClickHouse COUNT: 100,000% overhead!)
+
+4. **Splunk DB Connect Viability**:
    - ❌ **Not suitable for real-time analytics** (4-5 sec latency unacceptable)
    - ⚠️ **M3-specific issue**: Likely performs better on x86-64 hardware
    - ✅ **May be acceptable for**: Scheduled searches, historical analysis, infrequent queries
@@ -458,16 +465,24 @@ After extensive troubleshooting, successfully configured Splunk DB Connect on Ap
 - Multi-database federation
 - Result caching (not observed in testing)
 
-### PostgreSQL DB Connect Status
+### Performance Results: PostgreSQL Direct vs Splunk dbxquery
 
-⚠️ **PostgreSQL connection encountered configuration errors** in benchmark script:
-```
-Error: invalid dsn: invalid connection option "splunk_connection"
-```
+| Query Type | Direct Query (ms) | Via dbxquery (ms) | Overhead (ms) | Overhead (%) |
+|------------|-------------------|-------------------|---------------|--------------|
+| **Count All Records** | 14.71 | 4,957.46 | **+4,943** | **33,600%** |
+| **Aggregate by Event Type** | 35.38 | 5,098.81 | **+5,063** | **14,311%** |
+| **Filter Failed Logins** | 21.08 | 5,182.62 | **+5,162** | **24,491%** |
+| **Top 100 Data Transfer** | 35.06 | 4,827.40 | **+4,792** | **13,667%** |
+| **Average** | **26.56 ms** | **4,991.57 ms** | **+4,990 ms** | **21,518%** |
 
-**Next Steps for PostgreSQL:**
-- Debug connection string formatting in benchmark script
-- Expected overhead similar to ClickHouse (~4-5 seconds on M3)
+### Combined Results: All Databases
+
+| Database | Direct Avg (ms) | Via dbxquery Avg (ms) | Overhead (ms) | Overhead (%) |
+|----------|-----------------|------------------------|---------------|--------------|
+| **ClickHouse** | 12.89 | 4,783.67 | **+4,771** | **37,000%** |
+| **PostgreSQL** | 26.56 | 4,991.57 | **+4,990** | **21,518%** |
+
+**Key Insight**: DB Connect overhead is **absolute (~4-5 seconds)** rather than proportional, making it devastating for fast native queries
 
 ### Architecture Recommendations
 
@@ -491,18 +506,27 @@ Error: invalid dsn: invalid connection option "splunk_connection"
 
 ## 9. Next Steps
 
-### Immediate Actions
+### Completed Actions
 1. ✅ Document StarRocks ARM64 limitation
 2. ✅ Complete PostgreSQL baseline benchmarks
 3. ✅ Implement native baseline benchmark script with ARM64 support
 4. ✅ Load ClickHouse data using native client
 5. ✅ Complete PostgreSQL vs ClickHouse performance comparison
-6. ✅ Splunk DB Connect overhead testing (ClickHouse)
+6. ✅ Splunk DB Connect overhead testing (ClickHouse + PostgreSQL)
+7. ✅ Debug and fix PostgreSQL DB Connect configuration
+
+### Next Priority: Apache Iceberg Multi-Engine Testing
+1. **Configure MinIO** (S3-compatible storage)
+2. **Deploy Hive Metastore** (Iceberg catalog)
+3. **Deploy Trino** (query coordinator)
+4. **Create Iceberg tables** via Trino
+5. **Load data into Iceberg format**
+6. **Configure ClickHouse Iceberg engine**
+7. **Run benchmark 03**: Multi-engine query comparison
 
 ### Future Testing
 1. Deploy on x86-64 hardware for realistic DB Connect overhead measurement
-2. Debug PostgreSQL DB Connect configuration
-3. Implement Iceberg multi-engine testing (PostgreSQL + ClickHouse + Trino)
+2. Implement additional Iceberg engines (StarRocks, Spark)
 
 ### Documentation Updates
 1. Update SPECIFICATION.md with ARM64 findings
@@ -542,13 +566,15 @@ Successfully completed comprehensive database performance benchmarking on Apple 
 - ✅ PostgreSQL vs ClickHouse benchmarks (400K records)
 - ✅ ClickHouse 2.8x faster than PostgreSQL for analytics workloads
 - ✅ Splunk DB Connect installation and configuration on M3
-- ✅ DB Connect overhead measurement (ClickHouse: +4.8 sec per query)
+- ✅ DB Connect overhead measurement (ClickHouse: +4.8 sec, PostgreSQL: +5.0 sec per query)
 - ✅ ARM64 compatibility analysis
 - ✅ Comprehensive documentation
 
+**Remaining:**
+- ⏳ Apache Iceberg multi-engine testing (MinIO + Trino + Hive Metastore)
+
 **Blocked:**
 - ❌ StarRocks testing blocked by ARM64 incompatibility
-- ⚠️ PostgreSQL DB Connect (configuration error in benchmark script)
 
 **Production Readiness**:
 - PostgreSQL 16 (ARM64): **Excellent** - Ready for production (27.85ms avg)
@@ -560,15 +586,18 @@ Successfully completed comprehensive database performance benchmarking on Apple 
 
 | Component | Platform | Performance | Status |
 |-----------|----------|-------------|--------|
-| PostgreSQL 16 | ARM64 native | 27.85ms avg | ✅ Excellent |
-| ClickHouse 24 | ARM64 native | 10.03ms avg | ✅ Excellent (2.8x faster) |
+| PostgreSQL 16 | ARM64 native | 26.56ms avg direct | ✅ Excellent |
+| ClickHouse 24 | ARM64 native | 12.89ms avg direct | ✅ Excellent (2x faster) |
+| PostgreSQL via DB Connect | Rosetta 2 | 4,991ms avg (+4.99 sec) | ⚠️ M3 overhead |
+| ClickHouse via DB Connect | Rosetta 2 | 4,784ms avg (+4.78 sec) | ⚠️ M3 overhead |
 | StarRocks BE | Rosetta 2 | Incompatible | ❌ Failed |
-| Splunk DB Connect | Rosetta 2 | +4.8 sec overhead | ⚠️ M3-specific issue |
 
 **Key Insights:**
-1. **ClickHouse outperforms PostgreSQL** by 2.8x for analytics workloads (400K records)
+1. **ClickHouse outperforms PostgreSQL** by 2.1x for analytics workloads (400K records): 12.89ms vs 26.56ms
 2. **ARM64 native builds** deliver optimal performance on Apple Silicon
-3. **Splunk DB Connect on M3** adds extreme overhead (~4.8 sec) - deploy on x86-64 instead
+3. **Splunk DB Connect on M3** adds extreme overhead (~4.8-5.0 sec per query, both databases)
+   - Overhead is absolute, not proportional (constant ~5 sec regardless of query complexity)
+   - Fast native queries suffer disproportionately (ClickHouse: 37,000% overhead)
 4. **Rosetta 2 limitations** affect complex C++ applications (StarRocks) and Java performance (DB Connect)
 
 ---
