@@ -7,13 +7,21 @@ import requests
 import urllib3
 import json
 import time
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 SPLUNK_URL = "https://localhost:8089"
-USERNAME = "admin"
-PASSWORD = "ComplexP@ss123"
+USERNAME = os.getenv("SPLUNK_ADMIN_USERNAME", "admin")
+PASSWORD = os.getenv("SPLUNK_ADMIN_PASSWORD")
+
+if not PASSWORD:
+    raise ValueError("SPLUNK_ADMIN_PASSWORD not set in .env file")
 
 def get_session_key():
     """Get Splunk session key"""
@@ -152,27 +160,41 @@ def main():
     time.sleep(5)
 
     # Create PostgreSQL identity
-    create_identity(session_key, "postgres_identity", "postgres", "postgres123")
+    postgres_user = os.getenv("POSTGRES_USER", "postgres")
+    postgres_password = os.getenv("POSTGRES_PASSWORD", "")
+    create_identity(session_key, "postgres_identity", postgres_user, postgres_password)
 
     # Create ClickHouse identity
-    create_identity(session_key, "clickhouse_identity", "default", "")
+    clickhouse_user = os.getenv("CLICKHOUSE_USER", "default")
+    clickhouse_password = os.getenv("CLICKHOUSE_PASSWORD", "")
+    create_identity(session_key, "clickhouse_identity", clickhouse_user, clickhouse_password)
 
     # Create PostgreSQL connection
+    postgres_host = os.getenv("POSTGRES_HOST", "benchmark-postgresql")
+    postgres_port = os.getenv("POSTGRES_PORT", "5432")
+    postgres_db = os.getenv("POSTGRES_DB", "cybersecurity")
+    postgres_jdbc = f"jdbc:postgresql://{postgres_host}:{postgres_port}/{postgres_db}"
+
     create_connection(
         session_key,
         "postgresql_conn",
         "postgres_identity",
         "postgres",
-        "jdbc:postgresql://benchmark-postgresql:5432/cybersecurity"
+        postgres_jdbc
     )
 
     # Create ClickHouse connection (using MySQL type since ClickHouse is MySQL-compatible)
+    clickhouse_host = os.getenv("CLICKHOUSE_HOST", "benchmark-clickhouse")
+    clickhouse_port = os.getenv("CLICKHOUSE_PORT", "8123")
+    clickhouse_db = os.getenv("CLICKHOUSE_DATABASE", "cybersecurity")
+    clickhouse_jdbc = f"jdbc:clickhouse://{clickhouse_host}:{clickhouse_port}/{clickhouse_db}"
+
     create_connection(
         session_key,
         "clickhouse_conn",
         "clickhouse_identity",
         "mysql",
-        "jdbc:clickhouse://benchmark-clickhouse:8123/cybersecurity"
+        clickhouse_jdbc
     )
 
     # Test connections

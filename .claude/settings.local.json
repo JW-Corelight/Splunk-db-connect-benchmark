@@ -23,7 +23,10 @@
       "Bash(docker restart:*)",
       "Bash(git init:*)",
       "WebFetch(domain:docs.starrocks.io)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

@@ -5,7 +5,12 @@ Configure Splunk DB Connect using Playwright automation
 
 import asyncio
 import sys
+import os
+from dotenv import load_dotenv
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+
+# Load environment variables
+load_dotenv()
 
 
 async def configure_db_connect():
@@ -25,8 +30,13 @@ async def configure_db_connect():
             await page.wait_for_timeout(3000)
 
             print("Logging in...")
-            await page.fill('input[name="username"]', "admin")
-            await page.fill('input[name="password"]', "ComplexP@ss123")
+            splunk_username = os.getenv("SPLUNK_ADMIN_USERNAME", "admin")
+            splunk_password = os.getenv("SPLUNK_ADMIN_PASSWORD")
+            if not splunk_password:
+                raise ValueError("SPLUNK_ADMIN_PASSWORD not set in .env file")
+
+            await page.fill('input[name="username"]', splunk_username)
+            await page.fill('input[name="password"]', splunk_password)
             await page.click('button[type="submit"]')
             await page.wait_for_timeout(5000)
 
@@ -49,9 +59,12 @@ async def configure_db_connect():
                 await page.wait_for_timeout(2000)
 
                 # Fill identity form
+                postgres_user = os.getenv("POSTGRES_USER", "postgres")
+                postgres_password = os.getenv("POSTGRES_PASSWORD", "")
+
                 await page.fill('input[name="name"]', "postgres_identity")
-                await page.fill('input[name="username"]', "postgres")
-                await page.fill('input[name="password"]', "postgres123")
+                await page.fill('input[name="username"]', postgres_user)
+                await page.fill('input[name="password"]', postgres_password)
 
                 # Save identity
                 await page.click('button:has-text("Save")')
@@ -66,8 +79,11 @@ async def configure_db_connect():
                 await page.click('button:has-text("New Identity")', timeout=10000)
                 await page.wait_for_timeout(2000)
 
+                clickhouse_user = os.getenv("CLICKHOUSE_USER", "default")
+                clickhouse_password = os.getenv("CLICKHOUSE_PASSWORD", "")
+
                 await page.fill('input[name="name"]', "clickhouse_identity")
-                await page.fill('input[name="username"]', "default")
+                await page.fill('input[name="username"]', clickhouse_user)
                 # Leave password empty for ClickHouse default user
 
                 await page.click('button:has-text("Save")')
@@ -86,12 +102,16 @@ async def configure_db_connect():
                 await page.wait_for_timeout(2000)
 
                 # Fill connection form
+                postgres_host = os.getenv("POSTGRES_HOST", "benchmark-postgresql")
+                postgres_port = os.getenv("POSTGRES_PORT", "5432")
+                postgres_db = os.getenv("POSTGRES_DB", "cybersecurity")
+                jdbc_url = f"jdbc:postgresql://{postgres_host}:{postgres_port}/{postgres_db}"
+
                 await page.fill('input[name="name"]', "postgresql_conn")
                 await page.select_option('select[name="identity"]', "postgres_identity")
                 await page.select_option('select[name="connection_type"]', "PostgreSQL")
 
                 # JDBC URL
-                jdbc_url = "jdbc:postgresql://benchmark-postgresql:5432/cybersecurity"
                 await page.fill('input[name="jdbc_url"]', jdbc_url)
 
                 # Mark as read-only
@@ -116,12 +136,16 @@ async def configure_db_connect():
                 await page.click('button:has-text("New Connection")', timeout=10000)
                 await page.wait_for_timeout(2000)
 
+                clickhouse_host = os.getenv("CLICKHOUSE_HOST", "benchmark-clickhouse")
+                clickhouse_port = os.getenv("CLICKHOUSE_PORT", "8123")
+                clickhouse_db = os.getenv("CLICKHOUSE_DATABASE", "cybersecurity")
+                jdbc_url = f"jdbc:clickhouse://{clickhouse_host}:{clickhouse_port}/{clickhouse_db}"
+
                 await page.fill('input[name="name"]', "clickhouse_conn")
                 await page.select_option('select[name="identity"]', "clickhouse_identity")
                 await page.select_option('select[name="connection_type"]', "Generic")
 
                 # JDBC URL
-                jdbc_url = "jdbc:clickhouse://benchmark-clickhouse:8123/cybersecurity"
                 await page.fill('input[name="jdbc_url"]', jdbc_url)
 
                 # Mark as read-only

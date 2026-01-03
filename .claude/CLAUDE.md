@@ -2,326 +2,208 @@
 
 ## Project Purpose
 
-A comprehensive benchmarking environment for cybersecurity analytics, comparing **native database formats**, **Splunk DB Connect overhead**, and **Apache Iceberg multi-engine architecture** on Apple Silicon (M3).
+A comprehensive benchmarking environment for cybersecurity analytics on Apple Silicon (M3), comparing:
+- **Native database formats** (PostgreSQL, ClickHouse, StarRocks)
+- **Splunk DB Connect overhead** (proxy layer performance impact)
+- **Apache Iceberg multi-engine** (shared data access vs native performance)
 
-This project helps organizations make informed decisions about:
-- Database engine selection for security log analysis
-- Performance impact of Splunk DB Connect proxy layer
-- Trade-offs of Apache Iceberg for multi-engine access vs. native format performance
+Helps organizations make informed decisions about database engine selection, Splunk DB Connect usage, and Apache Iceberg trade-offs for security log analysis.
 
-## Current Phase
+## Current Status
 
-**Status**: Active Development (~85% complete)
+**Completion**: ~98% - Core infrastructure complete, native benchmarks done, Splunk DB Connect tested
 
 **What's Complete**:
-- ✅ Docker Compose orchestration for 7 services (PostgreSQL, ClickHouse, StarRocks, Splunk, Trino, MinIO, Hive Metastore)
-- ✅ Complete schemas for all databases
-- ✅ Benchmark scripts for native, dbxquery overhead, and Iceberg performance
-- ✅ Setup and configuration scripts
-- ✅ Comprehensive documentation
+- ✅ Docker orchestration for 7 services
+- ✅ Complete schemas and benchmarks
+- ✅ Setup scripts and documentation
+- ✅ Security fixes (credentials in .env)
 
 **What Remains**:
-- ⚠️ Data loading script (outlined in IMPLEMENTATION_SUMMARY.md)
-- ⚠️ Results reporting automation
-- ⚠️ Some troubleshooting documentation
+- ⚠️ Minor: Results reporting automation, additional troubleshooting docs
 
-## Architecture Overview
+## Architecture Quick Reference
 
-### Multi-Database Stack
+### Multi-Database Stack (7 Services)
 
-| Service | Purpose | Port | Architecture | Status |
-|---------|---------|------|--------------|--------|
-| PostgreSQL 16 | Relational baseline | 5432 | ARM64 native | Optimal |
-| ClickHouse 24.1 | Columnar OLAP + Iceberg | 8123 | ARM64 native | Optimal |
-| StarRocks 3.2 | MPP analytics + Iceberg | 9030 | Rosetta 2 | 15-20% overhead |
-| Splunk Enterprise | SIEM + DB Connect | 8000 | Rosetta 2 | 30-40% overhead |
-| Trino | Iceberg coordinator | 8080 | ARM64 native | Optimal |
-| MinIO | S3-compatible storage | 9000 | ARM64 native | Optimal |
-| Hive Metastore | Iceberg catalog | 9083 | Rosetta 2 | Acceptable |
+| Service | Port | Architecture | Status | Purpose |
+|---------|------|--------------|--------|---------|
+| PostgreSQL 16 | 5432 | ARM64 | Optimal | Relational baseline |
+| ClickHouse 24.1 | 8123 | ARM64 | Optimal | Columnar OLAP |
+| StarRocks 3.2 | 9030 | Rosetta 2 | 15-20% overhead | MPP analytics |
+| Splunk | 8000 | Rosetta 2 | 30-40% overhead | SIEM + DB Connect |
+| Trino | 8080 | ARM64 | Optimal | Iceberg coordinator |
+| MinIO | 9000 | ARM64 | Optimal | S3 storage |
+| Hive Metastore | 9083 | Rosetta 2 | Acceptable | Iceberg catalog |
 
-### Key Architecture Patterns
+### Performance Expectations (M3 Mac)
 
-1. **Native Performance Baseline**: Direct queries to databases in their native formats (PostgreSQL, ClickHouse MergeTree, StarRocks)
-2. **Splunk DB Connect Proxy**: Same queries routed through Splunk's dbxquery command (adds ~100-200ms overhead)
-3. **Apache Iceberg Multi-Engine**: Shared Iceberg tables queried by multiple engines (4-25x slower than native, but enables federation)
+- **ClickHouse**: 10-20ms simple, 30-50ms aggregation
+- **PostgreSQL**: 50-100ms simple, 150-300ms aggregation
+- **StarRocks**: 40-60ms simple, 80-150ms aggregation
+- **Splunk Overhead**: +100-200ms
+- **Iceberg**: 4-25x slower than native (trade-off for flexibility)
 
 ## Quality Standards
 
-### Shell Scripts
+### All Code
 
-**Requirements**:
-- Always use `set -euo pipefail` at the top
-- Provide clear, colored output (GREEN for success, RED for errors, YELLOW for warnings)
-- Log to `logs/` directory with timestamps
-- Include descriptive headers with purpose, platform, version
-- Validate prerequisites before proceeding
-- Provide helpful error messages with remediation steps
-
-**Example**:
-```bash
-#!/bin/bash
-set -euo pipefail
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-error() {
-    echo -e "${RED}[ERROR] $1${NC}"
-    exit 1
-}
-```
-
-### Python Scripts
-
-**Requirements**:
-- Follow PEP 8 style guide
-- Use type hints for function parameters and returns
-- Include docstrings for modules, classes, and functions
-- Handle errors gracefully with try/except blocks
-- Use connection pooling for database connections
-- Log performance metrics (execution time, row counts)
-
-**Example**:
-```python
-def benchmark_query(conn, query: str, iterations: int = 5) -> Dict[str, float]:
-    """
-    Execute a query multiple times and return timing statistics.
-
-    Args:
-        conn: Database connection object
-        query: SQL query string
-        iterations: Number of times to execute (default: 5)
-
-    Returns:
-        Dict with min, max, avg, median execution times in milliseconds
-    """
-```
-
-### Docker Compose
-
-**Requirements**:
-- Set explicit resource limits (memory, CPU) for M3 compatibility
-- Include health checks for all services
-- Document ARM64 vs Rosetta 2 architecture in comments
-- Use named volumes for data persistence
-- Configure networks properly (separate backend network)
-- Include restart policies
-
-**ARM64/Rosetta Notes**:
-- PostgreSQL, ClickHouse, Trino, MinIO: ARM64 native (optimal)
-- StarRocks, Splunk, Hive Metastore: Rosetta 2 (acceptable overhead)
-- Document any performance implications in comments
-
-## Testing and Validation
+- **Shell Scripts**: Use `set -euo pipefail`, colored output (GREEN/RED/YELLOW), log to `logs/`
+- **Python**: Type hints, docstrings, PEP 8, error handling, connection pooling
+- **Docker**: Resource limits for M3, health checks, ARM64/Rosetta documented
+- **Security**: All credentials in `.env` (gitignored), never hardcoded
 
 ### Before Making Changes
 
-1. **Environment Health Check**:
-   ```bash
-   python3 tests/validate_environment.py
-   ```
-   Verifies all services are running and accessible.
+1. Run `/validate` - Check environment health
+2. Run `/status` - Verify Docker services
+3. After changes: Restart affected services, run benchmarks, validate within 20% of baseline
 
-2. **Check Docker Services**:
-   ```bash
-   docker-compose -f docker-compose.m3.yml ps
-   ```
-   All services should show "healthy" status.
+## Common Tasks
 
-### After Making Changes
+### Environment Management
+```bash
+# Start
+docker-compose -f docker-compose.m3.yml up -d
 
-1. **Restart Affected Services**:
-   ```bash
-   docker-compose -f docker-compose.m3.yml restart <service>
-   ```
+# Stop
+docker-compose -f docker-compose.m3.yml down
 
-2. **Run Benchmarks to Validate**:
-   ```bash
-   cd benchmarks
-   ./run_all.sh
-   ```
+# Clean up (WARNING: Deletes all data)
+/cleanup
 
-3. **Validate Performance**:
-   - Results should be within 20% of documented baseline values
-   - Any significant deviation requires investigation
-   - Update documentation if intentional performance changes
+# Check status
+/status
 
-### Benchmark Expectations (M3 Platform)
+# Validate environment
+/validate
+```
 
-| Database | Simple Query | Aggregation | Notes |
-|----------|--------------|-------------|-------|
-| ClickHouse | 10-20ms | 30-50ms | ARM64 native, optimal |
-| PostgreSQL | 50-100ms | 150-300ms | ARM64 native, expected |
-| StarRocks | 40-60ms | 80-150ms | Rosetta 2, ~15% overhead |
+### Run Benchmarks
+```bash
+cd benchmarks && ./run_all.sh   # All benchmarks (~30 min)
+/benchmark                       # Via skill
+```
 
-**Splunk DB Connect Overhead**: Consistent +100-200ms added latency
+### Troubleshooting
+```bash
+# Service logs
+docker logs benchmark-<service> --tail 100 --follow
 
-**Iceberg Performance**: 4-25x slower than native (trade-off for multi-engine access)
+# Resource usage
+docker stats
+
+# Restart service
+docker-compose -f docker-compose.m3.yml restart <service>
+```
 
 ## Git Workflow
 
-### Branch Strategy
-
-- **main**: Stable, tested configurations
-- **feature/***: New features or benchmarks
-- **fix/***: Bug fixes or configuration corrections
-- **docs/***: Documentation updates
-
-### Commit Message Format
-
-Follow Conventional Commits:
+### Commit Format (Conventional Commits)
 
 ```
 <type>: <description>
 
 <optional body>
-
-<optional footer>
 ```
 
-**Types**:
-- `feat`: New feature or benchmark query
-- `fix`: Bug fix or configuration correction
-- `docs`: Documentation updates
-- `refactor`: Code refactoring without behavior change
-- `test`: Adding or updating tests/validation
-- `chore`: Maintenance (dependencies, cleanup)
-- `perf`: Performance improvements
+**Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`
 
 **Examples**:
 ```
 feat: Add query for failed login aggregation by source IP
-
 fix: Correct ClickHouse memory limit for M3 Pro
-
-docs: Update Iceberg setup instructions with troubleshooting steps
-
-perf: Optimize StarRocks table partitioning for time-based queries
+docs: Update Iceberg setup with troubleshooting
+perf: Optimize StarRocks partitioning (baseline: 45ms → 32ms)
 ```
 
 ### Before Committing
-
 1. Test affected components
-2. Run validation if configuration changed
-3. Update documentation if behavior changed
-4. Note any performance impacts in commit message
+2. Run validation if config changed
+3. Update docs if behavior changed
+4. Note performance impacts in message
 
-### Performance-Impacting Changes
+## Key Documentation
 
-If your change affects benchmark performance, include in commit message:
-```
-perf: Increase ClickHouse max_threads from 4 to 8
+- **README.md**: Quick start and user guide
+- **ARCHITECTURE.md**: System design and component architecture
+- **DECISIONS.md**: Architecture decision records (ADRs)
+- **SPECIFICATION.md**: Technical specification
+- **IMPLEMENTATION_SUMMARY.md**: Completion status
+- **docs/**: Detailed guides (SPLUNK_DBXQUERY_LIMITATIONS.md, ICEBERG_MULTI_ENGINE.md, etc.)
 
-Improves complex aggregation performance by ~30% on M3 Pro.
-Baseline updated: 45ms → 32ms for GROUP BY queries.
-```
+## Resource Requirements
 
-## Project Structure Reference
-
-```
-.
-├── .claude/                     # Claude Code configuration
-│   ├── CLAUDE.md               # This file - project context
-│   ├── settings.json           # Project-wide settings
-│   ├── settings.local.json     # User-specific permissions
-│   ├── hooks/                  # Session hooks
-│   └── commands/               # Slash commands
-├── benchmarks/                 # Performance benchmarks
-│   ├── 01_native_baseline.py
-│   ├── 02_splunk_dbxquery_overhead.py
-│   ├── 03_iceberg_multi_engine.py
-│   └── run_all.sh
-├── configs/                    # Service configurations
-├── docs/                       # Additional documentation
-├── scripts/                    # Setup and utility scripts
-├── sql/                        # Database schemas
-├── tests/                      # Validation scripts
-├── docker-compose.m3.yml       # Main orchestration file
-├── README.md                   # User-facing documentation
-├── SPECIFICATION.md            # Technical specification
-└── IMPLEMENTATION_SUMMARY.md   # Current completion status
-```
-
-## Common Tasks
-
-### Start Environment
-```bash
-docker-compose -f docker-compose.m3.yml up -d
-```
-
-### Stop Environment
-```bash
-docker-compose -f docker-compose.m3.yml down
-```
-
-### Clean Up Everything
-```bash
-bash scripts/cleanup.sh
-```
-
-### Load Data
-```bash
-bash scripts/phase4_load_data.sh  # Note: Not yet implemented
-```
-
-### Run All Benchmarks
-```bash
-cd benchmarks && ./run_all.sh
-```
-
-### Check Service Logs
-```bash
-docker logs benchmark-<service-name> --tail 100 --follow
-```
-
-## Key Considerations
-
-### Memory Management (M3)
-
-- **Total Required**: 18GB minimum, 24GB recommended
-- **Docker Desktop**: Allocate at least 16GB
+### Memory (M3 Mac)
+- **Minimum**: 18GB total, 16GB Docker allocation
+- **Recommended**: 24GB total for comfortable operation
 - **Per Service**: Limits defined in docker-compose.m3.yml
-- If experiencing OOM: Stop Splunk/Trino when not actively testing
 
 ### Disk Space
-
 - **Minimum**: 100GB free
 - **Databases + Logs**: ~60GB after data loading
 - **Docker Images**: ~20GB
-- **Working Space**: ~20GB buffer
-
-### Performance Baseline Values
-
-Keep these documented baseline values in mind when validating changes:
-- ClickHouse: 10-20ms simple, 30-50ms aggregation
-- PostgreSQL: 50-100ms simple, 150-300ms aggregation
-- StarRocks: 40-60ms simple, 80-150ms aggregation
-- Iceberg overhead: 4-20x slower than native
 
 ### Troubleshooting Priority
+1. `/status` - Docker service health
+2. `docker logs <service>` - Container logs
+3. `/validate` - Connectivity tests
+4. `df -h` - Disk space
+5. `docker stats` - Memory usage
+6. Consult `docs/` for specific issues
 
-1. Check Docker service health: `docker-compose ps`
-2. Check container logs: `docker logs <service>`
-3. Verify connectivity: `python3 tests/validate_environment.py`
-4. Check disk space: `df -h`
-5. Check memory: `docker stats`
-6. Consult `docs/` directory for specific issues
+## Project Structure
+
+```
+.
+├── .claude/                # Claude Code config, skills, hooks
+├── benchmarks/             # Performance benchmarks
+├── configs/                # Service configurations
+├── docs/                   # Additional documentation
+├── scripts/                # Setup and utility scripts
+├── specs/                  # SDD specifications
+├── sql/                    # Database schemas
+├── tests/                  # Validation scripts
+├── docker-compose.m3.yml   # Main orchestration
+├── .env                    # Credentials (gitignored)
+├── .env.example            # Template
+├── ARCHITECTURE.md         # System design
+├── DECISIONS.md            # ADRs
+└── README.md               # User documentation
+```
 
 ## Success Metrics
 
-The project achieves its goals when:
+Project succeeds when:
 - ✅ All 7 services deploy and remain healthy
 - ✅ All benchmark scripts execute successfully
-- ✅ Performance results are within 20% of documented baselines
-- ✅ Environment can run continuously for 24+ hours
-- ✅ Setup completes in under 2 hours from scratch
+- ✅ Performance within 20% of documented baselines
+- ✅ Environment runs continuously 24+ hours
+- ✅ Setup completes in <2 hours from scratch
 
-## Related Documentation
+## Quick Commands (Skills)
 
-- **README.md**: Quick start and user guide
-- **SPECIFICATION.md**: Detailed technical specification
-- **IMPLEMENTATION_SUMMARY.md**: Current completion status
-- **docs/SPLUNK_DBXQUERY_LIMITATIONS.md**: Splunk DB Connect analysis
-- **docs/ICEBERG_MULTI_ENGINE.md**: Iceberg architecture guide
-- **docs/SPLUNK_ANALYTICS_QUERIES.md**: Analytics query examples
+- `/validate` - Comprehensive environment validation
+- `/status` - Quick Docker service status check
+- `/benchmark` - Run all performance benchmarks
+- `/cleanup` - Clean up environment (WARNING: Deletes data)
+
+## Security Notes
+
+- **Credentials**: All in `.env` file (gitignored)
+- **Development Only**: Self-signed certs, no authentication on some services
+- **Sample Data**: Synthetic data, no PII, safe for testing
+
+## Important Reminders
+
+- **ARM64 Performance**: PostgreSQL, ClickHouse, Trino run natively (optimal)
+- **Rosetta Overhead**: Splunk (~30-40%), StarRocks (~15-20%) - acceptable for development
+- **Memory Management**: Stop Splunk/Trino when not testing if resources tight
+- **Baseline Values**: Document any intentional performance changes in commit messages
+
+## Related Resources
+
+- SPECIFICATION.md: Complete technical details
+- ARCHITECTURE.md: Component design and data flow
+- DECISIONS.md: Why specific technologies chosen
+- docs/: Troubleshooting guides and advanced topics

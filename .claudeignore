@@ -1,0 +1,154 @@
+# .claudeignore - Files and directories to exclude from Claude Code context
+
+# ==========================================
+# Large Data Directories
+# ==========================================
+data/
+logs/
+results/
+
+# ==========================================
+# Database Data (Large Binary Files)
+# ==========================================
+*.sql.gz
+*.dump
+*.backup
+*.db
+*.sqlite
+*.parquet
+
+# ==========================================
+# Log Files
+# ==========================================
+*.log
+*.log.*
+logs/
+
+# ==========================================
+# Build Artifacts and Cache
+# ==========================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# ==========================================
+# Docker and Temporary Files
+# ==========================================
+.docker/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ==========================================
+# OS Files
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+
+# ==========================================
+# IDE and Editor Files
+# ==========================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Credentials and Secrets
+# ==========================================
+.env
+*.env
+!.env.example
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+
+# ==========================================
+# Large Documentation Files
+# ==========================================
+docs/splunk/
+docs/clickhouse/
+
+# ==========================================
+# Test and Benchmark Results
+# ==========================================
+results/
+benchmarks/*.csv
+benchmarks/*.json
+*.prof
+*.trace
+flamegraph*.svg
+perf.data
+
+# ==========================================
+# Splunk App Data (Vendor Code)
+# ==========================================
+data/splunk/
+splunk-data/
+
+# ==========================================
+# MinIO Data
+# ==========================================
+data/minio/
+minio-data/
+
+# ==========================================
+# Database Specific Data
+# ==========================================
+data/postgresql/
+data/clickhouse/
+data/starrocks-fe/
+data/starrocks-be/
+
+# ==========================================
+# Node Modules (if any)
+# ==========================================
+node_modules/
+
+# ==========================================
+# Large Binary Files
+# ==========================================
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+*.7z
+*.bin
+*.exe
+*.dll
+*.dylib
+
+# ==========================================
+# Jupyter Notebook Checkpoints
+# ==========================================
+.ipynb_checkpoints/
+
+# ==========================================
+# Coverage Reports
+# ==========================================
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# ==========================================
+# Documentation Build Output
+# ==========================================
+docs/_build/
+site/
