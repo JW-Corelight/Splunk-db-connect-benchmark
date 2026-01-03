@@ -7,7 +7,9 @@ data/postgresql/
 data/clickhouse/
 data/starrocks-fe/
 data/starrocks-be/
+data/starrocks-fe-test/
 data/splunk/
+data/minio/
 data/*.json
 data/*.csv
 data/*.log
@@ -95,6 +97,7 @@ docker-compose.override.yml
 # ==========================================
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
