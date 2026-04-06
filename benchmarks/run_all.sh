@@ -54,6 +54,7 @@ check_dependencies() {
     python3 -c "import psycopg2" 2>/dev/null || missing_packages+=("psycopg2-binary")
     python3 -c "import clickhouse_connect" 2>/dev/null || missing_packages+=("clickhouse-connect")
     python3 -c "import pymysql" 2>/dev/null || missing_packages+=("pymysql")
+    python3 -c "import duckdb" 2>/dev/null || missing_packages+=("duckdb")
 
     if [ ${#missing_packages[@]} -gt 0 ]; then
         log_warn "Missing Python packages: ${missing_packages[*]}"
@@ -148,7 +149,7 @@ check_databases() {
 generate_summary() {
     log_header "Benchmark Summary Report"
 
-    local latest_results=($(ls -t "$RESULTS_DIR"/*.json 2>/dev/null | head -3))
+    local latest_results=($(ls -t "$RESULTS_DIR"/*.json 2>/dev/null | head -5))
 
     if [ ${#latest_results[@]} -eq 0 ]; then
         log_warn "No results found in $RESULTS_DIR"
@@ -194,6 +195,39 @@ generate_summary() {
                 jq -r '.clickhouse.count_all.slowdown_factor as $ch |
                        .starrocks.count_all.slowdown_factor as $sr |
                        "    ClickHouse: \($ch)x slower\n    StarRocks:  \($sr)x slower"' "$result" 2>/dev/null || echo "    (parsing failed)"
+
+            elif [[ "$filename" =~ duckdb_benchmark ]]; then
+                echo "  DuckDB Performance:"
+                jq -r '.duckdb_native.count_all.warm_avg_latency_ms as $native |
+                       .duckdb_parquet.count_all.warm_avg_latency_ms as $parquet |
+                       "    Native:  \($native) ms\n    Parquet: \($parquet) ms"' "$result" 2>/dev/null || echo "    (parsing failed)"
+
+            elif [[ "$filename" =~ concurrent_benchmark ]]; then
+                echo "  Concurrent Query Throughput (concurrency=25):"
+                for eng in postgresql clickhouse duckdb; do
+                    local qps=$(jq -r ".${eng}[-1].throughput_qps // empty" "$result" 2>/dev/null)
+                    local p99=$(jq -r ".${eng}[-1].p99_latency_ms // empty" "$result" 2>/dev/null)
+                    if [ -n "$qps" ]; then
+                        echo "    ${eng}: ${qps} qps (p99: ${p99} ms)"
+                    fi
+                done
+
+            elif [[ "$filename" =~ scale_benchmark ]]; then
+                echo "  Scale Benchmark (aggregation query avg ms):"
+                for eng in duckdb postgresql clickhouse; do
+                    local line="    ${eng}:"
+                    for scale in 100000 1000000 10000000; do
+                        local ms=$(jq -r ".scale_${scale}.${eng}.queries.aggregation.avg_latency_ms // empty" "$result" 2>/dev/null)
+                        if [ -n "$ms" ]; then
+                            line="${line} ${ms}ms"
+                        fi
+                    done
+                    echo "$line"
+                done
+
+            elif [[ "$filename" =~ ocsf_benchmark ]]; then
+                echo "  OCSF Format (raw vs OCSF avg overhead):"
+                jq -r '[.network_activity.queries[].overhead_pct // empty] | if length > 0 then "    Network Activity: \(add / length | round)% avg overhead" else "    (no data)" end' "$result" 2>/dev/null || echo "    (parsing failed)"
             fi
         done
     else
@@ -231,6 +265,21 @@ main() {
 
     # Benchmark 3: Iceberg Multi-Engine
     run_benchmark "03_iceberg_multi_engine.py" "Benchmark 3: Iceberg Multi-Engine Performance" || log_warn "Benchmark 3 failed (Iceberg may not be set up)"
+
+    # Benchmark 5: DuckDB Embedded Engine
+    run_benchmark "05_duckdb_benchmark.py" "Benchmark 5: DuckDB Embedded Engine" || log_warn "Benchmark 5 failed"
+
+    # Benchmark 6: Concurrent Query Performance
+    run_benchmark "06_concurrent_benchmark.py" "Benchmark 6: Concurrent Query Performance" || log_warn "Benchmark 6 failed"
+
+    # Benchmark 7: Dataset Scale Performance (runs only default scales: 100K, 1M, 10M)
+    run_benchmark "07_scale_benchmark.py" "Benchmark 7: Dataset Scale Performance" || log_warn "Benchmark 7 failed"
+
+    # Benchmark 8: OCSF Format Performance
+    run_benchmark "08_ocsf_benchmark.py" "Benchmark 8: OCSF Format Performance" || log_warn "Benchmark 8 failed"
+
+    # Benchmark 9: Catalog Comparison (Hive Metastore vs Polaris)
+    run_benchmark "09_catalog_benchmark.py" "Benchmark 9: Iceberg Catalog Comparison" || log_warn "Benchmark 9 failed (Trino/Polaris may not be running)"
 
     # Step 5: Generate summary
     generate_summary

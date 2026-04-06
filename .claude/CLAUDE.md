@@ -11,36 +11,41 @@ Helps organizations make informed decisions about database engine selection, Spl
 
 ## Current Status
 
-**Completion**: ~98% - Core infrastructure complete, native benchmarks done, Splunk DB Connect tested
+**Completion**: ~100% - All infrastructure, benchmarks, and modernization complete
 
 **What's Complete**:
-- ✅ Docker orchestration for 7 services
-- ✅ Complete schemas and benchmarks
+- ✅ Docker orchestration for 9 services (added Polaris, DuckDB embedded)
+- ✅ Complete schemas and 9 benchmark scripts
+- ✅ DuckDB embedded engine benchmarks (P1)
+- ✅ Concurrent query + scale testing (P2)
+- ✅ OCSF v1.8 format testing (P3)
+- ✅ Polaris REST catalog integration (P4)
+- ✅ Engine version updates to 2026 stable (P5)
 - ✅ Setup scripts and documentation
 - ✅ Security fixes (credentials in .env)
 
-**What Remains**:
-- ⚠️ Minor: Results reporting automation, additional troubleshooting docs
-
 ## Architecture Quick Reference
 
-### Multi-Database Stack (7 Services)
+### Multi-Database Stack (9 Services + DuckDB Embedded)
 
-| Service | Port | Architecture | Status | Purpose |
-|---------|------|--------------|--------|---------|
-| PostgreSQL 16 | 5432 | ARM64 | Optimal | Relational baseline |
-| ClickHouse 24.1 | 8123 | ARM64 | Optimal | Columnar OLAP |
-| StarRocks 3.2 | 9030 | Rosetta 2 | 15-20% overhead | MPP analytics |
-| Splunk | 8000 | Rosetta 2 | 30-40% overhead | SIEM + DB Connect |
-| Trino | 8080 | ARM64 | Optimal | Iceberg coordinator |
-| MinIO | 9000 | ARM64 | Optimal | S3 storage |
-| Hive Metastore | 9083 | Rosetta 2 | Acceptable | Iceberg catalog |
+| Service | Version | Port | Architecture | Status | Purpose |
+|---------|---------|------|--------------|--------|---------|
+| PostgreSQL | 16 | 5432 | ARM64 | Optimal | Relational baseline |
+| ClickHouse | 26.3 | 8123 | ARM64 | Optimal | Columnar OLAP |
+| StarRocks | 3.5 LTS | 9030 | ARM64 | Optimal | MPP analytics |
+| Splunk | 9.3 | 8000 | Rosetta 2 | 30-40% overhead | SIEM + DB Connect |
+| Trino | 480 | 8080 | ARM64 | Optimal | Iceberg coordinator |
+| MinIO | latest | 9000 | ARM64 | Optimal | S3 storage |
+| Hive Metastore | 3.1.3 | 9083 | Rosetta 2 | Acceptable | Iceberg catalog |
+| Apache Polaris | 1.3.0 | 8181 | ARM64 | Optimal | Iceberg REST catalog |
+| DuckDB | 1.5+ | embedded | ARM64 | Optimal | In-process analytics |
 
 ### Performance Expectations (M3 Mac)
 
 - **ClickHouse**: 10-20ms simple, 30-50ms aggregation
+- **DuckDB (native)**: 1-5ms simple, 5-20ms aggregation (embedded, zero network)
 - **PostgreSQL**: 50-100ms simple, 150-300ms aggregation
-- **StarRocks**: 40-60ms simple, 80-150ms aggregation
+- **StarRocks**: 40-60ms simple, 80-150ms aggregation (now ARM64 native)
 - **Splunk Overhead**: +100-200ms
 - **Iceberg**: 4-25x slower than native (trade-off for flexibility)
 
@@ -81,8 +86,15 @@ docker-compose -f docker-compose.m3.yml down
 
 ### Run Benchmarks
 ```bash
-cd benchmarks && ./run_all.sh   # All benchmarks (~30 min)
+cd benchmarks && ./run_all.sh   # All benchmarks (~45 min)
 /benchmark                       # Via skill
+
+# Individual benchmarks (no services required for 05, 07, 08):
+python3 benchmarks/05_duckdb_benchmark.py --skip-parquet --skip-iceberg
+python3 benchmarks/06_concurrent_benchmark.py --engines duckdb
+python3 benchmarks/07_scale_benchmark.py --engines duckdb --scales 100000 1000000
+python3 benchmarks/08_ocsf_benchmark.py
+python3 benchmarks/09_catalog_benchmark.py  # requires Trino + Polaris
 ```
 
 ### Troubleshooting
