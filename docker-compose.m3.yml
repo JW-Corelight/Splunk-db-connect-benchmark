@@ -45,13 +45,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
       POSTGRES_DB: ${POSTGRES_DB:-cybersecurity}
-      POSTGRES_INITDB_ARGS: "--data-checksums --encoding=UTF8 --locale=C"
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "--data-checksums --encoding=UTF8 --locale=C --auth-host=md5"
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
       - ./data/postgresql:/var/lib/postgresql/data
       - ./configs/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./sql/00-create-metastore-db.sql:/docker-entrypoint-initdb.d/00-metastore-db.sql:ro
       - ./sql/postgresql_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     command: >
       postgres
